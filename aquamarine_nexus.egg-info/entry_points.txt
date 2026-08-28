@@ -1,0 +1,3 @@
+[console_scripts]
+aqua = aquamarine_nexus.core.aqua_shell_editor:main
+aquamarine-nexus = aquamarine_nexus.cli:main

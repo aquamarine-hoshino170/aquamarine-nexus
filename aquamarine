@@ -1,0 +1,342 @@
+cat << 'EOF' > $PREFIX/bin/aqua
+#!/usr/bin/env bash
+python3 -c "
+import sys, os, tty, termios, shutil
+
+def run(filename=None):
+    fname = filename or 'New Buffer'
+    lines = ['']
+    if filename and os.path.exists(filename):
+        try:
+            with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.read().splitlines() or ['']
+        except Exception:
+            lines = ['']
+
+    cx, cy = 0, 0
+    row_offset = 0
+    col_offset = 0
+    modified = False
+    status_msg = ''
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    def get_size():
+        sz = shutil.get_terminal_size((80, 24))
+        return max(8, sz.lines), max(20, sz.columns)
+
+    def draw():
+        rows, cols = get_size()
+        body_rows = max(1, rows - 4)
+
+        nonlocal row_offset, col_offset
+        if cy < row_offset:
+            row_offset = cy
+        elif cy >= row_offset + body_rows:
+            row_offset = cy - body_rows + 1
+
+        if cx < col_offset:
+            col_offset = cx
+        elif cx >= col_offset + cols - 1:
+            col_offset = cx - cols + 2
+
+        buf = ['\033[?25l\033[H']
+
+        # 1. Nano Title Bar
+        mod_mark = '*' if modified else ''
+        title_left = '  AQUA 1.0 (Zero-Lag Engine)'
+        title_center = f'File: {fname}{mod_mark}'
+        total_spaces = max(1, cols - len(title_left) - len(title_center))
+        sp_l = ' ' * (total_spaces // 2)
+        sp_r = ' ' * (cols - len(title_left) - len(sp_l) - len(title_center))
+        header_text = f'{title_left}{sp_l}{title_center}{sp_r}'[:cols]
+        buf.append(f'\033[7m\033[1m{header_text}\033[0m\r\n')
+
+        # 2. Virtualized Viewport (Lazy Slicing - O(1) Memory)
+        for i in range(body_rows):
+            file_idx = row_offset + i
+            if file_idx < len(lines):
+                line_content = lines[file_idx][col_offset:col_offset + cols]
+                buf.append(f'\033[37m{line_content}\033[0m\033[K\r\n')
+            else:
+                buf.append('\033[K\r\n')
+
+        # 3. Status Bar
+        stat = status_msg if status_msg else f'[Line {cy+1}/{len(lines)} | Col {cx+1}]'
+        buf.append(f'\033[{rows-2};1H\033[K\033[33m{stat[:cols]}\033[0m')
+
+        # 4. Shortcut Help Bar
+        shortcuts_1 = '  ^G Get Help   ^O WriteOut   ^W Where Is   ^K Cut Text   ^J Justify'
+        shortcuts_2 = '  ^X Exit       ^R Read File  ^\\ Replace    ^U Paste Text ^T To Spell'
+        buf.append(f'\033[{rows-1};1H\033[7m{shortcuts_1:<{cols}}\033[0m')
+        buf.append(f'\033[{rows};1H\033[7m{shortcuts_2:<{cols}}\033[0m')
+
+        # 5. Position cursor safely inside body
+        screen_y = (cy - row_offset) + 2
+        screen_x = (cx - col_offset) + 1
+        buf.append(f'\033[{screen_y};{screen_x}H\033[?25h')
+
+        sys.stdout.write(''.join(buf))
+        sys.stdout.flush()
+
+    try:
+        sys.stdout.write('\033[?1049h\033[2J')
+        tty.setraw(fd)
+
+        while True:
+            draw()
+            # Batch read to prevent freezing during fast pasting / huge input
+            k = sys.stdin.read(1)
+
+            # Ctrl + X: Exit
+            if k == '\x18':
+                break
+
+            # Ctrl + O: Save
+            elif k == '\x0f':
+                save_target = filename if filename else 'output.txt'
+                try:
+                    with open(save_target, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(lines))
+                    status_msg = f'[ Wrote {len(lines)} lines to {save_target} ]'
+                    modified = False
+                except Exception as e:
+                    status_msg = f'[ Save Error: {str(e)} ]'
+
+            # Enter Key
+            elif k in ('\r', '\n'):
+                rest = lines[cy][cx:]
+                lines[cy] = lines[cy][:cx]
+                lines.insert(cy + 1, rest)
+                cy += 1
+                cx = 0
+                modified = True
+                status_msg = ''
+
+            # Backspace Key
+            elif k in ('\x7f', '\x08'):
+                if cx > 0:
+                    lines[cy] = lines[cy][:cx-1] + lines[cy][cx:]
+                    cx -= 1
+                    modified = True
+                elif cy > 0:
+                    prev_len = len(lines[cy - 1])
+                    lines[cy - 1] += lines[cy]
+                    lines.pop(cy)
+                    cy -= 1
+                    cx = prev_len
+                    modified = True
+                status_msg = ''
+
+            # Escape Sequences (Arrows, Home, End)
+            elif k == '\x1b':
+                seq = sys.stdin.read(2)
+                if seq == '[A' and cy > 0:
+                    cy -= 1
+                    cx = min(cx, len(lines[cy]))
+                elif seq == '[B' and cy < len(lines) - 1:
+                    cy += 1
+                    cx = min(cx, len(lines[cy]))
+                elif seq == '[C':
+                    if cx < len(lines[cy]):
+                        cx += 1
+                    elif cy < len(lines) - 1:
+                        cy += 1
+                        cx = 0
+                elif seq == '[D':
+                    if cx > 0:
+                        cx -= 1
+                    elif cy > 0:
+                        cy -= 1
+                        cx = len(lines[cy])
+
+            # UTF-8 & Standard Character Insertion (Supports High-Speed Streams)
+            else:
+                lines[cy] = lines[cy][:cx] + k + lines[cy][cx:]
+                cx += 1
+                modified = True
+                status_msg = ''
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        sys.stdout.write('\033[?1049l')
+        sys.stdout.flush()
+
+if __name__ == '__main__':
+    run(sys.argv[1] if len(sys.argv) > 1 else None)
+" "$@"
+EOF
+
+chmod +x $PREFIX/bin/aqua
+cat << 'EOF' > $PREFIX/bin/aqua
+#!/usr/bin/env bash
+python3 -c "
+import sys, os, tty, termios, shutil
+
+def run(filename=None):
+    fname = filename or 'New Buffer'
+    lines = ['']
+    if filename and os.path.exists(filename):
+        try:
+            with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.read().splitlines() or ['']
+        except Exception:
+            lines = ['']
+
+    cx, cy = 0, 0
+    row_offset = 0
+    col_offset = 0
+    modified = False
+    status_msg = ''
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    def get_size():
+        sz = shutil.get_terminal_size((80, 24))
+        return max(8, sz.lines), max(20, sz.columns)
+
+    def draw():
+        rows, cols = get_size()
+        body_rows = max(1, rows - 4)
+
+        nonlocal row_offset, col_offset
+        if cy < row_offset:
+            row_offset = cy
+        elif cy >= row_offset + body_rows:
+            row_offset = cy - body_rows + 1
+
+        if cx < col_offset:
+            col_offset = cx
+        elif cx >= col_offset + cols - 1:
+            col_offset = cx - cols + 2
+
+        buf = ['\033[?25l\033[H']
+
+        # 1. Nano Title Bar
+        mod_mark = '*' if modified else ''
+        title_left = '  AQUA 1.0 (Zero-Lag Engine)'
+        title_center = f'File: {fname}{mod_mark}'
+        total_spaces = max(1, cols - len(title_left) - len(title_center))
+        sp_l = ' ' * (total_spaces // 2)
+        sp_r = ' ' * (cols - len(title_left) - len(sp_l) - len(title_center))
+        header_text = f'{title_left}{sp_l}{title_center}{sp_r}'[:cols]
+        buf.append(f'\033[7m\033[1m{header_text}\033[0m\r\n')
+
+        # 2. Virtualized Viewport (Lazy Slicing - O(1) Memory)
+        for i in range(body_rows):
+            file_idx = row_offset + i
+            if file_idx < len(lines):
+                line_content = lines[file_idx][col_offset:col_offset + cols]
+                buf.append(f'\033[37m{line_content}\033[0m\033[K\r\n')
+            else:
+                buf.append('\033[K\r\n')
+
+        # 3. Status Bar
+        stat = status_msg if status_msg else f'[Line {cy+1}/{len(lines)} | Col {cx+1}]'
+        buf.append(f'\033[{rows-2};1H\033[K\033[33m{stat[:cols]}\033[0m')
+
+        # 4. Shortcut Help Bar
+        shortcuts_1 = '  ^G Get Help   ^O WriteOut   ^W Where Is   ^K Cut Text   ^J Justify'
+        shortcuts_2 = '  ^X Exit       ^R Read File  ^\\ Replace    ^U Paste Text ^T To Spell'
+        buf.append(f'\033[{rows-1};1H\033[7m{shortcuts_1:<{cols}}\033[0m')
+        buf.append(f'\033[{rows};1H\033[7m{shortcuts_2:<{cols}}\033[0m')
+
+        # 5. Position cursor safely inside body
+        screen_y = (cy - row_offset) + 2
+        screen_x = (cx - col_offset) + 1
+        buf.append(f'\033[{screen_y};{screen_x}H\033[?25h')
+
+        sys.stdout.write(''.join(buf))
+        sys.stdout.flush()
+
+    try:
+        sys.stdout.write('\033[?1049h\033[2J')
+        tty.setraw(fd)
+
+        while True:
+            draw()
+            # Batch read to prevent freezing during fast pasting / huge input
+            k = sys.stdin.read(1)
+
+            # Ctrl + X: Exit
+            if k == '\x18':
+                break
+
+            # Ctrl + O: Save
+            elif k == '\x0f':
+                save_target = filename if filename else 'output.txt'
+                try:
+                    with open(save_target, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(lines))
+                    status_msg = f'[ Wrote {len(lines)} lines to {save_target} ]'
+                    modified = False
+                except Exception as e:
+                    status_msg = f'[ Save Error: {str(e)} ]'
+
+            # Enter Key
+            elif k in ('\r', '\n'):
+                rest = lines[cy][cx:]
+                lines[cy] = lines[cy][:cx]
+                lines.insert(cy + 1, rest)
+                cy += 1
+                cx = 0
+                modified = True
+                status_msg = ''
+
+            # Backspace Key
+            elif k in ('\x7f', '\x08'):
+                if cx > 0:
+                    lines[cy] = lines[cy][:cx-1] + lines[cy][cx:]
+                    cx -= 1
+                    modified = True
+                elif cy > 0:
+                    prev_len = len(lines[cy - 1])
+                    lines[cy - 1] += lines[cy]
+                    lines.pop(cy)
+                    cy -= 1
+                    cx = prev_len
+                    modified = True
+                status_msg = ''
+
+            # Escape Sequences (Arrows, Home, End)
+            elif k == '\x1b':
+                seq = sys.stdin.read(2)
+                if seq == '[A' and cy > 0:
+                    cy -= 1
+                    cx = min(cx, len(lines[cy]))
+                elif seq == '[B' and cy < len(lines) - 1:
+                    cy += 1
+                    cx = min(cx, len(lines[cy]))
+                elif seq == '[C':
+                    if cx < len(lines[cy]):
+                        cx += 1
+                    elif cy < len(lines) - 1:
+                        cy += 1
+                        cx = 0
+                elif seq == '[D':
+                    if cx > 0:
+                        cx -= 1
+                    elif cy > 0:
+                        cy -= 1
+                        cx = len(lines[cy])
+
+            # UTF-8 & Standard Character Insertion (Supports High-Speed Streams)
+            else:
+                lines[cy] = lines[cy][:cx] + k + lines[cy][cx:]
+                cx += 1
+                modified = True
+                status_msg = ''
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        sys.stdout.write('\033[?1049l')
+        sys.stdout.flush()
+
+if __name__ == '__main__':
+    run(sys.argv[1] if len(sys.argv) > 1 else None)
+" "$@"
+EOF
+
+chmod +x $PREFIX/bin/aqua
