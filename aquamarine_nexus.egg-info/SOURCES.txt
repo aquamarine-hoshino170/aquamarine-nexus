@@ -16,6 +16,7 @@ aquamarine_nexus.egg-info/PKG-INFO
 aquamarine_nexus.egg-info/SOURCES.txt
 aquamarine_nexus.egg-info/dependency_links.txt
 aquamarine_nexus.egg-info/entry_points.txt
+aquamarine_nexus.egg-info/requires.txt
 aquamarine_nexus.egg-info/top_level.txt
 aquamarine_nexus/biology/__init__.py
 aquamarine_nexus/biology/bio_core.py
@@ -24,6 +25,7 @@ aquamarine_nexus/biology/neuron_dynamics.py
 aquamarine_nexus/biology/turing_diffusion.py
 aquamarine_nexus/chemistry/__init__.py
 aquamarine_nexus/chemistry/cheminformatics.py
+aquamarine_nexus/chemistry/drug_likeness_filters.py
 aquamarine_nexus/chemistry/real_gas.py
 aquamarine_nexus/geometry/__init__.py
 aquamarine_nexus/geometry/chaos_fractals.py
@@ -176,6 +178,7 @@ aquamarine_nexus/science/kohlrausch_conductivity.py
 aquamarine_nexus/science/kutta_joukowski_lift.py
 aquamarine_nexus/science/laser_physics.py
 aquamarine_nexus/science/lbm_fluid.py
+aquamarine_nexus/science/lipkin_quantum_manybody.py
 aquamarine_nexus/science/marcus_electron_transfer.py
 aquamarine_nexus/science/maxwell_electrodynamics_core.py
 aquamarine_nexus/science/mega_biology_core.py
