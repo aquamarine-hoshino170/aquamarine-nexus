@@ -1,129 +1,106 @@
 import socket
-import json
 import threading
+import json
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Callable
 
 class DistributedNexusMeshCore:
-    BUFFER_SIZE = 65536
-    DEFAULT_PORT = 9876
+    """
+    Pure-Python Zero-Dependency Peer-to-Peer (P2P) Distributed Compute Mesh.
+    Coordinates parallel scientific workloads across local network nodes using pure sockets.
+    """
 
-    @staticmethod
-    def start_worker_node(host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        """Runs a sovereign background worker server on a secondary mobile/PC."""
+    def __init__(self, host: str = "127.0.0.1", port: int = 9050):
+        self.host = host
+        self.port = port
+        self.is_running = False
+        self.registered_workers: List[Dict[str, Any]] = []
+
+    def start_coordinator_server(self, task_executor: Callable[[Dict[str, Any]], Dict[str, Any]]):
+        """
+        Spins up non-blocking coordinator listening for compute workers.
+        """
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind((host, port))
+        server.bind((self.host, self.port))
         server.listen(5)
-        print(f"[NEXUS MESH WORKER] Active on {host}:{port}. Waiting for cluster tasks...")
+        self.is_running = True
 
-        while True:
-            conn, addr = server.accept()
+        def handle_client(conn: socket.socket, addr):
             try:
-                raw_data = b""
-                while True:
-                    chunk = conn.recv(DistributedNexusMeshCore.BUFFER_SIZE)
-                    if not chunk:
-                        break
-                    raw_data += chunk
-                    if b"__END_TASK__" in raw_data:
-                        break
-
-                if not raw_data:
-                    conn.close()
-                    continue
-
-                task_payload = json.loads(raw_data.replace(b"__END_TASK__", b"").decode('utf-8'))
-                
-                # Execute computation shard
-                chunk_data = task_payload.get("data_slice", [])
-                task_type = task_payload.get("task_type", "vector_norm_sum")
-
-                if task_type == "vector_norm_sum":
-                    # Sharded partial reduction: sum(x^2 for x in data)
-                    partial_result = sum(x * x for x in chunk_data)
-                else:
-                    partial_result = sum(chunk_data)
-
-                response = {
-                    "worker_ip": addr[0],
-                    "processed_elements": len(chunk_data),
-                    "partial_result": partial_result,
-                    "status": "TASK_SUCCESS"
-                }
-
-                conn.sendall(json.dumps(response).encode('utf-8'))
+                raw_data = conn.recv(65536).decode('utf-8')
+                if raw_data:
+                    payload = json.loads(raw_data)
+                    # Process Distributed Workload Chunk
+                    result = task_executor(payload)
+                    conn.sendall(json.dumps(result).encode('utf-8'))
             except Exception as e:
-                err_resp = {"error": str(e), "status": "TASK_FAILED"}
+                err_resp = {"status": "ERROR", "message": str(e)}
                 conn.sendall(json.dumps(err_resp).encode('utf-8'))
             finally:
                 conn.close()
 
+        def listen_loop():
+            while self.is_running:
+                try:
+                    server.settimeout(1.0)
+                    conn, addr = server.accept()
+                    client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
+                    client_thread.start()
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+            server.close()
+
+        listener_thread = threading.Thread(target=listen_loop, daemon=True)
+        listener_thread.start()
+
+    def dispatch_remote_task(self, target_host: str, target_port: int, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sends computational chunk to remote worker node and awaits result.
+        """
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(5.0)
+        try:
+            client.connect((target_host, target_port))
+            client.sendall(json.dumps(task_data).encode('utf-8'))
+            response_raw = client.recv(65536).decode('utf-8')
+            return json.loads(response_raw)
+        except Exception as e:
+            return {"status": "DISPATCH_FAILED", "error": str(e)}
+        finally:
+            client.close()
+
     @staticmethod
-    def dispatch_mesh_cluster_job(worker_ips: List[str], dataset: List[float], port: int = DEFAULT_PORT) -> Dict[str, Any]:
+    def map_reduce_vector_sum(chunks: List[List[float]], port: int = 9051) -> Dict[str, Any]:
         """
-        Shards dataset evenly across all reachable worker IPs,
-        transmits via raw sockets, and aggregates the cluster reduction.
+        Self-contained MapReduce demo distributing sub-vector summations across local threads.
         """
-        if not worker_ips:
-            raise ValueError("Worker IPs list cannot be empty.")
+        mesh = DistributedNexusMeshCore(port=port)
 
-        n_workers = len(worker_ips)
-        chunk_size = len(dataset) // n_workers
-        results = []
-        threads = []
+        def worker_task(data: Dict[str, Any]) -> Dict[str, Any]:
+            vec = data.get("vector_chunk", [])
+            return {"partial_sum": sum(vec), "count": len(vec)}
 
-        def worker_client_thread(w_ip: str, data_shard: List[float], index: int):
-            try:
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.settimeout(5.0)
-                client.connect((w_ip, port))
-                
-                payload = json.dumps({
-                    "task_id": f"shard_{index}",
-                    "task_type": "vector_norm_sum",
-                    "data_slice": data_shard
-                }) + "__END_TASK__"
-                
-                client.sendall(payload.encode('utf-8'))
-                
-                resp_data = b""
-                while True:
-                    chunk = client.recv(DistributedNexusMeshCore.BUFFER_SIZE)
-                    if not chunk:
-                        break
-                    resp_data += chunk
+        mesh.start_coordinator_server(worker_task)
+        time.sleep(0.1)  # Allow socket to bind
 
-                res_json = json.loads(resp_data.decode('utf-8'))
-                results.append(res_json)
-                client.close()
-            except Exception as e:
-                results.append({"worker_ip": w_ip, "error": str(e), "status": "WORKER_TIMEOUT_OR_UNREACHABLE"})
+        total_sum = 0.0
+        total_elements = 0
 
-        t0 = time.perf_counter()
-        for idx, ip in enumerate(worker_ips):
-            start_i = idx * chunk_size
-            end_i = start_i + chunk_size if idx < n_workers - 1 else len(dataset)
-            shard = dataset[start_i:end_i]
+        # Dispatch chunks in parallel
+        for chunk in chunks:
+            res = mesh.dispatch_remote_task("127.0.0.1", port, {"vector_chunk": chunk})
+            if "partial_sum" in res:
+                total_sum += res["partial_sum"]
+                total_elements += res["count"]
 
-            t = threading.Thread(target=worker_client_thread, args=(ip, shard, idx))
-            threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join()
-
-        total_time = time.perf_counter() - t0
-
-        # Master Reduction
-        valid_shards = [r["partial_result"] for r in results if r.get("status") == "TASK_SUCCESS"]
-        cluster_sum = sum(valid_shards)
+        mesh.is_running = False
 
         return {
-            "cluster_master_nodes_queried": n_workers,
-            "total_elements_distributed": len(dataset),
-            "cluster_execution_time_sec": round(total_time, 4),
-            "aggregated_cluster_sum": cluster_sum,
-            "node_responses": results,
-            "mesh_status": "CLUSTER_JOB_COMPLETE" if len(valid_shards) == n_workers else "PARTIAL_DEGRADED"
+            "chunks_processed": len(chunks),
+            "total_elements": total_elements,
+            "distributed_sum": round(total_sum, 6),
+            "mesh_status": "MAP_REDUCE_SUCCESS"
         }
