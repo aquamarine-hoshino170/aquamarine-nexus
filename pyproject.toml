@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aquamarine-nexus"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
-  { name="Aquamarine Hoshino" }
+  { name = "Aquamarine Hoshino" }
 ]
 description = "Sovereign Zero-Dependency Pure Scientific CAS, Quantum Biophysics, 4D Spacetime Geodesic & JIT Kernel"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+dependencies = [
+    "aquamarine-dredge>=122.0.0"
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
