@@ -4,21 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aquamarine-nexus"
-version = "1.0.3"
-authors = [
-  { name="Aquamarine Hoshino" },
-]
-description = "Zero-Dependency Sovereign AI Framework, Tensor Network & Theoretical Physics Engine"
+version = "0.1.0"
+description = "Sovereign Pure-Mathematics & Theoretical Physics AI Engine"
 readme = "README.md"
+authors = [{ name = "Soma Dutta" }]
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = []
 
-[project.urls]
-"Homepage" = "https://github.com/somadutta/aquamarine-nexus"
+[project.scripts]
+nexus-chat = "aquamarine_nexus.core.sovereign_chat_cli:main"

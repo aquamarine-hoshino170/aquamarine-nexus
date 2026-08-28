@@ -90,3 +90,10 @@ class SovereignChatCLI:
 if __name__ == "__main__":
     cli = SovereignChatCLI()
     cli.start()
+
+def main():
+    cli = SovereignChatCLI()
+    cli.start()
+
+if __name__ == "__main__":
+    main()
