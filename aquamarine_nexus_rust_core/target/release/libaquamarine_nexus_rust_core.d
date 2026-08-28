@@ -1,0 +1,1 @@
+/data/data/com.termux/files/home/aquamarine-nexus/aquamarine_nexus_rust_core/target/release/libaquamarine_nexus_rust_core.so: /data/data/com.termux/files/home/aquamarine-nexus/aquamarine_nexus_rust_core/src/lib.rs
