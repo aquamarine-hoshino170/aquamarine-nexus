@@ -1,30 +1,14 @@
-__version__ = "2.4.0"
+from aquamarine_nexus.core.sovereign_autonexus import AutoNexus
+from aquamarine_nexus.core.sovereign_formula_registry import FormulaRegistry
+from aquamarine_nexus.core.sovereign_formulas_engine import SovereignFormulasEngine
+from aquamarine_nexus.core.sovereign_quantization_engine import SovereignQuantizationEngine
+from aquamarine_nexus.core.sovereign_inference_engine import SovereignInferenceEngine
 
-import inspect
-import importlib
-import pkgutil
-
-# Direct I/O Shortcuts
-from .io_core import NexusIO
-export_json = NexusIO.export_json
-import_json = NexusIO.import_json
-export_csv = NexusIO.export_csv
-import_csv = NexusIO.import_csv
-export_serialized = NexusIO.export_serialized
-import_serialized = NexusIO.import_serialized
-
-# Dynamically export all classes across submodules
-__all__ = ["NexusIO", "export_json", "import_json", "export_csv", "import_csv", "export_serialized", "import_serialized"]
-
-for _, _modname, _ in pkgutil.walk_packages(__path__, __name__ + "."):
-    if _modname.endswith(".registry") or _modname.endswith(".cli"):
-        continue
-    try:
-        _mod = importlib.import_module(_modname)
-        for _name, _obj in inspect.getmembers(_mod, inspect.isclass):
-            if _obj.__module__.startswith("aquamarine_nexus"):
-                globals()[_name] = _obj
-                if _name not in __all__:
-                    __all__.append(_name)
-    except Exception:
-        pass
+__version__ = "0.1.0"
+__all__ = [
+    "AutoNexus",
+    "FormulaRegistry",
+    "SovereignFormulasEngine",
+    "SovereignQuantizationEngine",
+    "SovereignInferenceEngine"
+]
