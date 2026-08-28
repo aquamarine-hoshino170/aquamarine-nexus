@@ -1,28 +1,24 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "aquamarine-nexus"
-version = "1.0.1"
+version = "1.0.3"
 authors = [
-  { name = "Aquamarine Hoshino" }
+  { name="Soma Dutta" },
 ]
-description = "Sovereign Zero-Dependency Pure Scientific CAS, Quantum Biophysics, 4D Spacetime Geodesic & JIT Kernel"
+description = "Zero-Dependency Sovereign AI Framework, Tensor Network & Theoretical Physics Engine"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
-dependencies = [
-    "aquamarine-dredge>=122.0.0"
-]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Mathematics",
-    "Topic :: Scientific/Engineering :: Physics",
 ]
+dependencies = []
 
-[project.scripts]
-aquamarine-nexus = "aquamarine_nexus.cli:main"
-aqua = "aquamarine_nexus.core.aqua_shell_editor:main"
+[project.urls]
+"Homepage" = "https://github.com/somadutta/aquamarine-nexus"
