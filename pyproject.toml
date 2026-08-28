@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aquamarine-nexus"
 version = "1.0.3"
 authors = [
-  { name="Soma Dutta" },
+  { name="Aquamarine Hoshino" },
 ]
 description = "Zero-Dependency Sovereign AI Framework, Tensor Network & Theoretical Physics Engine"
 readme = "README.md"
